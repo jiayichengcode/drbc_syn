@@ -1,0 +1,7 @@
+*.gz
+*.scr
+*.log
+logs/
+res/
+*.csv
+__pycache__/
