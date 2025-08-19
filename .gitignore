@@ -3,5 +3,5 @@
 *.log
 logs/
 res/
-*.csv
+FEDFUNDS.csv
 __pycache__/

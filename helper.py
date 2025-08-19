@@ -8,6 +8,7 @@ from tqdm import tqdm
 import warnings
 from numba import njit
 import os
+from drmv_riskfree import get_drmv_weights
 warnings.filterwarnings("ignore")
 
 def L_t_vectorized(t, z, y, r, sigma):
@@ -538,7 +539,6 @@ def compute_annualized_matrix(
 
     return matrix_df, matrix, sampled_permnos, months
 
-import numpy as np
 
 def james_stein_mean(ret_matrix):
     """
@@ -767,3 +767,24 @@ def run_single_backtest_select_stocks(
         new_weights = get_drmv_weights(monthly_returns_train, annual_target_return)
         
     return new_weights
+
+def compute_annualized_matrix_type(
+    df: pd.DataFrame,
+    sigma: np.ndarray,
+    permno_list: list = None,
+    trading_days_per_year: int = 252,
+):
+    assert 'type' in df.columns, "df must have a 'type' column"
+    if permno_list is not None:
+        df = df[df['permno'].isin(permno_list)]
+    df = df.sort_values(['permno', 'date'])
+    df['date'] = pd.to_datetime(df['date'])
+    df['ret'] = pd.to_numeric(df['ret'], errors='coerce')
+    mean_type_logret = df.groupby(['type','permno'])['log_ret'].mean()
+    # make it a matrix of shape (num_types, num_permnos)
+    matrix = mean_type_logret.unstack().to_numpy()*trading_days_per_year
+    matrix += (np.diag(sigma@sigma.T))/2
+    
+    return matrix
+    
+    
