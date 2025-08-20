@@ -773,6 +773,7 @@ def compute_annualized_matrix_type(
     sigma: np.ndarray,
     permno_list: list = None,
     trading_days_per_year: int = 252,
+    dt: float = 1/2520,
 ):
     assert 'type' in df.columns, "df must have a 'type' column"
     if permno_list is not None:
@@ -782,9 +783,9 @@ def compute_annualized_matrix_type(
     df['ret'] = pd.to_numeric(df['ret'], errors='coerce')
     mean_type_logret = df.groupby(['type','permno'])['log_ret'].mean()
     # make it a matrix of shape (num_types, num_permnos)
-    matrix = mean_type_logret.unstack().to_numpy()*trading_days_per_year
+    matrix = mean_type_logret.unstack().to_numpy()*1/dt
     matrix += (np.diag(sigma@sigma.T))/2
-    
-    return matrix
+    n = len(df[(df['type']==1)&(df['permno']==df['permno'].iloc[0])])
+    return matrix, n
     
     
