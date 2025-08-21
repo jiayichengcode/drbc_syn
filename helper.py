@@ -82,15 +82,15 @@ def L_t_vectorized(t, z, y, r, sigma):
     # 这允许它与 (n_samples, m_samples) 的 dot_term 进行广播相减
     exponent = dot_term - 0.5 * t * norm_sq[:, np.newaxis]
     # For each column, keep values between the 2nd and 98th percentile
-    if exponent.shape[0] > 1: # Percentiles are meaningful only for >1 sample
-        p2 = np.percentile(exponent, 5, axis=0, keepdims=True)
-        p98 = np.percentile(exponent, 95, axis=0, keepdims=True)
+    # if exponent.shape[0] > 1: # Percentiles are meaningful only for >1 sample
+    #     p5 = np.percentile(exponent, 5, axis=0, keepdims=True)
+    #     p95 = np.percentile(exponent, 95, axis=0, keepdims=True)
         
-        # Create a mask for values within the percentile range
-        mask = (exponent >= p2) & (exponent <= p98)
+    #     # Create a mask for values within the percentile range
+    #     mask = (exponent >= p5) & (exponent <= p95)
         
-        # Replace values outside the range with -inf so they become 0 after exp()
-        exponent = np.where(mask, exponent, -np.inf)
+    #     # if this column has all values outside the percentile range, remove this column
+    #     exponent = np.where(mask, exponent, -np.inf)
     result = np.exp(exponent)
     
     # 根据原始输入维度，调整输出形状，使其更符合直觉
@@ -751,7 +751,7 @@ def run_single_backtest_select_stocks(
     ).resample('M').apply(lambda x: (1 + x).prod() - 1).dropna()
     
     # Add risk-free asset
-    risk_free_returns = (1 + r)**(1/12) - 1 + np.random.normal(0, 0.0003, len(monthly_returns_train))
+    risk_free_returns = (1 + r)**(1/12) - 1 + np.random.normal(0, 0.001, len(monthly_returns_train))
     monthly_returns_train[0] = risk_free_returns
     
     perms_with_rf = np.append(selected_perms, 0)
