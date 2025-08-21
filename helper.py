@@ -82,15 +82,15 @@ def L_t_vectorized(t, z, y, r, sigma):
     # 这允许它与 (n_samples, m_samples) 的 dot_term 进行广播相减
     exponent = dot_term - 0.5 * t * norm_sq[:, np.newaxis]
     # For each column, keep values between the 2nd and 98th percentile
-    # if exponent.shape[0] > 1: # Percentiles are meaningful only for >1 sample
-    #     p5 = np.percentile(exponent, 5, axis=0, keepdims=True)
-    #     p95 = np.percentile(exponent, 95, axis=0, keepdims=True)
+    if exponent.shape[0] > 1: # Percentiles are meaningful only for >1 sample
+        p5 = np.percentile(exponent, 5, axis=0, keepdims=True)
+        p95 = np.percentile(exponent, 95, axis=0, keepdims=True)
         
-    #     # Create a mask for values within the percentile range
-    #     mask = (exponent >= p5) & (exponent <= p95)
+        # Create a mask for values within the percentile range
+        mask = (exponent >= p5) & (exponent <= p95)
         
-    #     # if this column has all values outside the percentile range, remove this column
-    #     exponent = np.where(mask, exponent, -np.inf)
+        # if this column has all values outside the percentile range, remove this column
+        exponent = np.where(mask, exponent, -np.inf)
     result = np.exp(exponent)
     
     # 根据原始输入维度，调整输出形状，使其更符合直觉
