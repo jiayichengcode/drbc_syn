@@ -741,6 +741,8 @@ def run_single_backtest_select_stocks(
     selected_perms: np.ndarray,
     annual_target_return: float,
     r: float,
+    riskfree = True,
+    seed = 42,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Calculate DRMV weights for a single rebalancing period.
@@ -749,20 +751,23 @@ def run_single_backtest_select_stocks(
     monthly_returns_train = training_data.pivot_table(
         index='date', columns='permno', values='ret'
     ).resample('M').apply(lambda x: (1 + x).prod() - 1).dropna()
-    
-    # Add risk-free asset
-    risk_free_returns = (1 + r)**(1/12) - 1 + np.random.normal(0, 0.001, len(monthly_returns_train))
-    monthly_returns_train[0] = risk_free_returns
-    
-    perms_with_rf = np.append(selected_perms, 0)
-    
-    # Ensure columns are in the correct order
-    monthly_returns_train = monthly_returns_train.reindex(columns=perms_with_rf)
+    np.random.seed(seed)
+    if riskfree:
+        # Add risk-free asset
+        risk_free_returns = (1 + r)**(1/12) - 1 + np.random.normal(0, 0.001, len(monthly_returns_train))
+        monthly_returns_train[0] = risk_free_returns
+        
+        perms_with_rf = np.append(selected_perms, 0)
+        
+        # Ensure columns are in the correct order
+        monthly_returns_train = monthly_returns_train.reindex(columns=perms_with_rf)
 
-    # Check for sufficient training data
-    if monthly_returns_train.shape[0] < 118:
-        # Return equal weights if not enough data
-        new_weights = np.ones(len(selected_perms) + 1) / (len(selected_perms) + 1)
+        # Check for sufficient training data
+        if monthly_returns_train.shape[0] < 118:
+            # Return equal weights if not enough data
+            new_weights = np.ones(len(selected_perms) + 1) / (len(selected_perms) + 1)
+        else:
+            new_weights = get_drmv_weights(monthly_returns_train, annual_target_return)
     else:
         new_weights = get_drmv_weights(monthly_returns_train, annual_target_return)
         
@@ -774,18 +779,51 @@ def compute_annualized_matrix_type(
     permno_list: list = None,
     trading_days_per_year: int = 252,
     dt: float = 1/2520,
+    seed: int = 42,
 ):
-    assert 'type' in df.columns, "df must have a 'type' column"
+    #assert 'type' in df.columns, "df must have a 'type' column"
     if permno_list is not None:
         df = df[df['permno'].isin(permno_list)]
     df = df.sort_values(['permno', 'date'])
     df['date'] = pd.to_datetime(df['date'])
-    df['ret'] = pd.to_numeric(df['ret'], errors='coerce')
-    mean_type_logret = df.groupby(['type','permno'])['log_ret'].mean()
+    #mean_type_logret = df.groupby(['type','permno'])['log_ret'].mean()
+    monthly_log_ret = df.set_index('date').groupby('permno')['log_ret'].resample('M').sum().reset_index()
+    # 'M' 表示按日历月（month end）进行重采样
+
+    # --- 步骤 2: 在月度数据上计算 6 个月的滚动收益率 ---
+    # 首先按 permno 和 date 排序，确保滚动操作的顺序正确
+    monthly_log_ret = monthly_log_ret.sort_values(['permno', 'date'])
+
+    # 对每个 permno 分别计算滚动和
+    # .rolling(window=6) 定义了一个6期（即6个月）的窗口
+    # min_periods=6 确保只有当窗口满6个月时才计算，否则结果为 NaN
+    # .reset_index(level=0, drop=True) 是为了将 groupby 和 rolling 产生的多级索引清理掉，方便赋值
+    monthly_log_ret['rolling_12m_log_ret'] = monthly_log_ret.groupby('permno')['log_ret'].rolling(window=12, min_periods=12).sum().reset_index(level=0, drop=True)
     # make it a matrix of shape (num_types, num_permnos)
-    matrix = mean_type_logret.unstack().to_numpy()*1/dt
+    #matrix = mean_type_logret.unstack().to_numpy()*1/dt
+    monthly_log_ret.dropna(inplace=True)
+    matrix = (monthly_log_ret.pivot(index='date', columns='permno', values='rolling_12m_log_ret').values/252)/dt
+
+    np.random.seed(seed)
+    for i in range(matrix.shape[1]):
+        col = matrix[:, i]
+        #p20 = np.percentile(col, 20)
+        p80 = np.percentile(col, 80)
+
+        #lower_mask = col < p20
+        upper_mask = col > p80
+
+        # num_lower = np.sum(lower_mask)
+        # if num_lower > 0:
+        #     noise = np.random.normal(0, 0.001, num_lower)
+        #     col[lower_mask] = np.mean(col) + noise
+
+        num_upper = np.sum(upper_mask)
+        if num_upper > 0:
+            noise = np.random.normal(0, 0.001, num_upper)
+            col[upper_mask] = 0.25 + noise
     matrix += (np.diag(sigma@sigma.T))/2
-    n = len(df[(df['type']==1)&(df['permno']==df['permno'].iloc[0])])
+    n = matrix.shape[0] #len(df[(df['type']==1)&(df['permno']==df['permno'].iloc[0])])
     return matrix, n
     
     

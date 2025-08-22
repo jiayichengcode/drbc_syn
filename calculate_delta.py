@@ -309,7 +309,10 @@ def compute_big_delta_star(B, r, T, alpha, delta, sigma_matrix, m=200, rng=None)
 
     # Monte Carlo draws Y ~ N(0, T I)
     Y = rng.normal(loc=0.0, scale=np.sqrt(T), size=(m, d)).astype(np.float64)
-
+    # make >95 percentile of Y to be 0
+    Y = np.where(Y > 1.96*np.sqrt(T), 0, Y)
+    # make < 5 percentile of Y to be 0
+    Y = np.where(Y < -1.96*np.sqrt(T), 0, Y)
     # v_i = sigma^{-1} (B_i - r*1)
     V = (B - r * ones) @ sigma_inv.T                  # (n, d)
     V_norm2 = np.sum(V * V, axis=1)                   # (n,)
